@@ -17,7 +17,7 @@ setup() {
     pip install -q -r requirements.txt
     if ! command -v cmake >/dev/null || ! pkg-config --exists opencv4; then
         $SUDO apt-get update -qq
-        $SUDO apt-get install -y -qq cmake pkg-config libopencv-dev
+        $SUDO apt-get install -y -qq cmake pkg-config libopencv-dev >/dev/null
     fi
 }
 

@@ -3,6 +3,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
+#include <torch/cuda.h>
 #include <torch/script.h>
 
 #include <algorithm>
