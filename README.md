@@ -79,6 +79,22 @@ A video file as `--input` gives per-frame scores with `--csv scores.csv`.
    pairwise overlap mask; the final scan over the mask runs on the CPU.
 6. A kernel measures the fraction of the frame covered by the kept boxes.
 
+## Measured speed
+
+One 1920x1440 photo, cut into 13 tiles and run in batches of 8, on a Tesla T4
+(Colab). Mean of 48 runs, in milliseconds per frame. All three produced the
+same 39 detections.
+
+| Stage | Python baseline | C++ engine, TorchScript FP32 | C++ engine, TensorRT FP16 |
+|---|---|---|---|
+| Preprocess | 40.1 | 2.5 | 2.5 |
+| Inference | 154.7 | 162.9 | 31.8 |
+| Postprocess | 4.4 | 0.3 | 0.2 |
+| Total | 199.1 (5.0 fps) | 165.7 (6.0 fps) | 34.6 (28.9 fps) |
+
+The model used here was trained on under half of TACO and is not accurate yet
+(mAP50 0.23), so these numbers describe speed only.
+
 ## Limits
 
 - Coverage is measured from boxes, so it overstates the true waste area. Masks

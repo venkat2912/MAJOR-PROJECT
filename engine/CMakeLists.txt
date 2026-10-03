@@ -35,6 +35,9 @@ if(WASTE_WITH_TENSORRT)
     message(FATAL_ERROR "WASTE_WITH_TENSORRT needs TENSORRT_INCLUDE_DIR and TENSORRT_LIBRARY")
   endif()
   target_sources(waste_engine PRIVATE src/trt_model.cpp)
+  # TensorRT's own headers use APIs they mark deprecated.
+  set_source_files_properties(src/trt_model.cpp PROPERTIES
+                              COMPILE_OPTIONS -Wno-deprecated-declarations)
   target_include_directories(waste_engine PRIVATE ${TENSORRT_INCLUDE_DIR})
   target_link_libraries(waste_engine PRIVATE ${TENSORRT_LIBRARY})
   target_compile_definitions(waste_engine PRIVATE WASTE_WITH_TENSORRT)
