@@ -1,0 +1,8 @@
+build/
+data/
+runs/
+models/
+out/
+*.pt
+*.torchscript
+__pycache__/
