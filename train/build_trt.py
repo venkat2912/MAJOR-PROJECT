@@ -22,6 +22,14 @@ def main():
     model = YOLO(args.weights)
     onnx_path = model.export(format="onnx", imgsz=args.size, batch=args.batch)
 
+    # TensorRT 11 removed the FP16 builder flag: the precision has to be written
+    # into the ONNX graph instead. Inputs and outputs stay FP32 either way.
+    flag_fp16 = not args.fp32 and hasattr(trt.BuilderFlag, "FP16")
+    if not args.fp32 and not flag_fp16:
+        from ultralytics.utils.export.engine import modelopt_quantize_onnx
+        onnx_path = modelopt_quantize_onnx(str(onnx_path), quantize=16,
+                                           shape=(args.batch, 3, args.size, args.size))
+
     logger = trt.Logger(trt.Logger.WARNING)
     builder = trt.Builder(logger)
     network = builder.create_network(0)
@@ -32,7 +40,7 @@ def main():
 
     config = builder.create_builder_config()
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 4 << 30)
-    if not args.fp32:
+    if flag_fp16:
         config.set_flag(trt.BuilderFlag.FP16)
 
     print(f"building {'FP32' if args.fp32 else 'FP16'} engine with TensorRT {trt.__version__} "

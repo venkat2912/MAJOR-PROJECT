@@ -38,6 +38,11 @@ setup_trt() {
         cu="$(python3 -c 'import torch; print(torch.version.cuda.split(".")[0])')"
         pip install -q "tensorrt-cu${cu}" onnx onnxslim
     fi
+    # TensorRT 11 needs ModelOpt to write FP16 into the ONNX graph.
+    if [ "$(python3 -c 'import tensorrt; print(tensorrt.__version__.split(".")[0])')" -ge 11 ] &&
+        ! python3 -c 'import modelopt.onnx' 2>/dev/null; then
+        pip install -q "nvidia-modelopt[onnx]>=0.44"
+    fi
     if [ ! -d third_party/TensorRT/include ]; then
         local ver
         ver="$(python3 -c 'import tensorrt; print(".".join(tensorrt.__version__.split(".")[:2]))')"
@@ -125,7 +130,9 @@ trt)
     if [ ! -f "models/$NAME.torchscript" ]; then
         python3 train/export.py --weights "$WEIGHTS" --out "models/$NAME.torchscript" --batch "$BATCH"
     fi
-    python3 train/build_trt.py --weights "$WEIGHTS" --out "models/$NAME.engine" --batch "$BATCH"
+    # FP32=1 builds a full-precision engine instead of FP16.
+    python3 train/build_trt.py --weights "$WEIGHTS" --out "models/$NAME.engine" --batch "$BATCH" \
+        ${FP32:+--fp32}
     build
     compare "models/$NAME.torchscript" "$IMAGE"
     ;;
