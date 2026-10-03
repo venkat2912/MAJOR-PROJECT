@@ -90,16 +90,18 @@ One 1920x1440 validation photo, cut into 13 tiles and run in batches of 8, on a
 Tesla T4. Mean of 48 runs, in milliseconds per frame. Within each run the three
 pipelines produced identical detections.
 
-Kaggle (CUDA 12.8, TensorRT 11.3), with the model trained on the full dataset:
+Kaggle (CUDA 12.8, TensorRT 11.3), current code with box merging, model trained
+on the full dataset. All three reported the same 12 objects.
 
 | Stage | Python baseline | C++ engine, TorchScript FP32 | C++ engine, TensorRT FP16 |
 |---|---|---|---|
-| Preprocess | 38.2 | 2.6 | 2.6 |
-| Inference | 123.1 | 133.8 | 33.2 |
-| Postprocess | 4.2 | 0.3 | 0.3 |
-| Total | 165.4 (6.0 fps) | 136.7 (7.3 fps) | 36.1 (27.7 fps) |
+| Preprocess | 34.1 | 2.5 | 2.3 |
+| Inference | 118.8 | 128.8 | 30.8 |
+| Postprocess | 4.1 | 0.2 | 0.2 |
+| Total | 157.1 (6.4 fps) | 131.5 (7.6 fps) | 33.4 (29.9 fps) |
 
-Colab (CUDA 13.0, TensorRT 11.3), with an earlier model:
+Colab (CUDA 13.0, TensorRT 11.3), an earlier model and plain non-max
+suppression, before box merging was added:
 
 | Stage | Python baseline | C++ engine, TorchScript FP32 | C++ engine, TensorRT FP16 |
 |---|---|---|---|
@@ -108,11 +110,12 @@ Colab (CUDA 13.0, TensorRT 11.3), with an earlier model:
 | Postprocess | 4.4 | 0.3 | 0.2 |
 | Total | 199.1 (5.0 fps) | 165.7 (6.0 fps) | 34.6 (28.9 fps) |
 
-The engine's time is the same on both; the end-to-end speedup is 4.6x on Kaggle
-and 5.8x on Colab because the Python baseline ran faster on Kaggle.
+The engine's time is about the same on both; the end-to-end speedup is 4.7x on
+Kaggle and 5.8x on Colab because the Python baseline ran faster on Kaggle.
 
-Both runs used plain non-max suppression, before box merging was added. Merging
-changes only the last, CPU-side step, on both sides of the comparison.
+Box merging matters on this photo: with plain non-max suppression the same
+model reported 25 boxes for a scene of two cans and a bottle, because the
+bottle spans several tiles. With merging it reports 12.
 
 ## Measured accuracy
 
