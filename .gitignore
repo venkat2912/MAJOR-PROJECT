@@ -1,0 +1,11 @@
+build/
+data/
+runs/
+models/
+out/
+*.pt
+*.torchscript
+__pycache__/
+third_party/
+*.engine
+*.onnx
