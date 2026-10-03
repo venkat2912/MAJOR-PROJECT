@@ -125,6 +125,11 @@ The detector finds about half of the plastic and metal and is not reliable for
 the other classes. Glass and organic have too few examples in TACO to learn or
 to measure.
 
+The training curves, confusion matrix and raw benchmark output of that run are
+in `results/`.
+
+![Training curves](results/results.png)
+
 ## Limits
 
 - Coverage is measured from boxes, so it overstates the true waste area. Masks
