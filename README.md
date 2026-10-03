@@ -44,6 +44,11 @@ paper/cardboard, metal, glass, organic, other) and exports it. `bench` compares
 the engine with the baseline on a validation image. `EPOCHS`, `BATCH`, `REPEAT`
 and `IMAGE` can be set as environment variables.
 
+The training set is each image plus the 640-pixel tiles the engine would cut
+from it. The image host throttles bulk downloads, so `train` stops before
+training if fewer than 90% of the images arrived; run it again and it fetches
+only the missing ones, or set `MIN_FRACTION=0` to train on what is there.
+
 ```
 !bash scripts/run_all.sh trt
 ```

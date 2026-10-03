@@ -101,7 +101,8 @@ smoke)
     ;;
 train)
     setup
-    python3 train/prepare_taco.py
+    # MIN_FRACTION=0 trains on whatever was downloaded instead of stopping.
+    python3 train/prepare_taco.py --min-fraction "${MIN_FRACTION:-0.9}"
     python3 train/train.py --epochs "$EPOCHS"
     python3 train/export.py --batch "$BATCH"
     ;;
