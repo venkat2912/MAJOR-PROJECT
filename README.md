@@ -1,5 +1,4 @@
-# MAJOR-PROJECT
-AI BASED ENGINE FOR WASTE CLASSIFICATION
+# WasteScope
 
 A GPU inference engine for drone cleanliness surveys of ghats and water-body
 banks. A high-resolution frame is cut into overlapping tiles, each tile goes
@@ -19,6 +18,7 @@ frame is C++ and CUDA.
 | `tools/compare.py` | Checks the two agree and prints the per-stage speedup |
 | `train/` | TACO download and conversion, fine-tuning, TorchScript export |
 | `scripts/run_all.sh` | End-to-end driver for Colab and Kaggle |
+| `waste_engine.ipynb` | Notebook that runs everything with one *Run all* |
 | `CNN.py`, `yolo.cfg`, `coco.names` | The original YOLOv3 demo, kept for reference |
 
 ## Running on Colab or Kaggle
@@ -26,8 +26,8 @@ frame is C++ and CUDA.
 Use a GPU runtime (on Kaggle, also turn internet on).
 
 ```
-!git clone https://github.com/venkat2912/MAJOR-PROJECT.git
-%cd MAJOR-PROJECT
+!git clone https://github.com/venkat2912/WasteScope.git
+%cd WasteScope
 !bash scripts/run_all.sh smoke
 ```
 
