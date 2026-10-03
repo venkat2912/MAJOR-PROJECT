@@ -106,8 +106,10 @@ smoke)
     ;;
 train)
     setup
-    # MIN_FRACTION=0 trains on whatever was downloaded instead of stopping.
-    python3 train/prepare_taco.py --min-fraction "${MIN_FRACTION:-0.9}"
+    # MIN_FRACTION=0 trains on whatever was downloaded instead of stopping;
+    # MAX_WAIT caps the seconds spent waiting on a throttling image host.
+    python3 train/prepare_taco.py --min-fraction "${MIN_FRACTION:-0.9}" \
+        --max-wait "${MAX_WAIT:-1800}"
     python3 train/train.py --epochs "$EPOCHS"
     python3 train/export.py --batch "$BATCH"
     ;;
