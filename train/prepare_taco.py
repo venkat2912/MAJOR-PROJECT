@@ -8,6 +8,8 @@ import io
 import json
 import random
 import re
+import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -41,15 +43,35 @@ def material(name, supercategory):
     return "other"
 
 
+def download(url, attempts=4):
+    """Returns (bytes, None) or (None, reason). Backs off when the host throttles."""
+    reason = "no response"
+    for attempt in range(attempts):
+        try:
+            r = requests.get(url, timeout=60)
+            if r.status_code == 200:
+                return r.content, None
+            reason = f"http {r.status_code}"
+            if r.status_code not in (429, 500, 502, 503, 504):
+                break
+        except requests.RequestException as e:
+            reason = type(e).__name__
+        time.sleep(2.0 * (attempt + 1))
+    return None, reason
+
+
 def fetch(img, out_path, max_side):
-    """Saves one image with its pixels in the orientation the labels assume."""
+    """Saves one image with its pixels in the orientation the labels assume.
+    Returns None on success, otherwise a short reason."""
     if out_path.exists():
-        return True
+        return None
     url = img.get("flickr_url") or img.get("flickr_640_url")
     if not url:
-        return False
+        return "no url"
+    data, reason = download(url)
+    if data is None:
+        return reason
     try:
-        data = requests.get(url, timeout=60).content
         raw = Image.open(io.BytesIO(data))
         want = img["width"] / img["height"]
         chosen = None
@@ -60,15 +82,15 @@ def fetch(img, out_path, max_side):
                 chosen = cand
                 break
         if chosen is None:
-            return False
+            return "aspect ratio does not match the annotations"
         chosen = chosen.convert("RGB")
         if max(chosen.size) > max_side:
             chosen.thumbnail((max_side, max_side), Image.BILINEAR)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         chosen.save(out_path, "JPEG", quality=90)
-        return True
-    except Exception:
-        return False
+        return None
+    except Exception as e:
+        return f"bad image ({type(e).__name__})"
 
 
 def main():
@@ -76,7 +98,7 @@ def main():
     p.add_argument("--out", default="data/taco")
     p.add_argument("--max-side", type=int, default=1920)
     p.add_argument("--val-fraction", type=float, default=0.15)
-    p.add_argument("--workers", type=int, default=16)
+    p.add_argument("--workers", type=int, default=6)
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
 
@@ -110,11 +132,13 @@ def main():
     print(f"downloading {len(images)} images ...")
     kept = {"train": 0, "val": 0}
     counts = [0] * len(CLASSES)
+    failures = Counter()
     with ThreadPoolExecutor(args.workers) as pool:
-        for done, (im, ok) in enumerate(pool.map(job, images), 1):
+        for done, (im, reason) in enumerate(pool.map(job, images), 1):
             if done % 100 == 0:
                 print(f"  {done}/{len(images)}")
-            if not ok:
+            if reason is not None:
+                failures[reason] += 1
                 continue
             W, H = im["width"], im["height"]
             lines = []
@@ -139,6 +163,8 @@ def main():
 
     print(f"images: {kept['train']} train, {kept['val']} val, "
           f"{len(images) - kept['train'] - kept['val']} failed to download")
+    for reason, n in failures.most_common():
+        print(f"  failed: {n:<5}{reason}")
     print("boxes per class:")
     for n, c in zip(CLASSES, counts):
         print(f"  {n:<18}{c}")

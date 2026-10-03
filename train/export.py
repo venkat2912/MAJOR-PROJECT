@@ -25,7 +25,9 @@ def main():
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(path, out)
+    # Ultralytics writes next to the weights, which may already be the target.
+    if Path(path).resolve() != out.resolve():
+        shutil.copy(path, out)
     names = model.names
     out.with_suffix(".names").write_text("\n".join(names[i] for i in sorted(names)) + "\n")
     print(f"saved {out} and {out.with_suffix('.names')} ({len(names)} classes, batch {args.batch})")
