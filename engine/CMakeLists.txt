@@ -8,6 +8,8 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+option(WASTE_WITH_TENSORRT "Build the TensorRT backend" OFF)
+
 # LibTorch comes from the pip-installed torch package:
 #   -DCMAKE_PREFIX_PATH="$(python3 -c 'import torch; print(torch.utils.cmake_prefix_path)')"
 find_package(Torch REQUIRED)
@@ -22,6 +24,18 @@ add_library(waste_kernels STATIC src/gpu_pipeline.cu)
 target_include_directories(waste_kernels PUBLIC include)
 target_link_libraries(waste_kernels PUBLIC CUDA::cudart)
 
-add_executable(waste_engine src/main.cpp)
+add_executable(waste_engine src/main.cpp src/torch_model.cpp)
 target_include_directories(waste_engine PRIVATE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(waste_engine PRIVATE waste_kernels ${TORCH_LIBRARIES} ${OpenCV_LIBS})
+
+if(WASTE_WITH_TENSORRT)
+  # TENSORRT_INCLUDE_DIR holds NvInfer.h; TENSORRT_LIBRARY is the full path to
+  # libnvinfer. Both must be the same TensorRT version that built the engine.
+  if(NOT TENSORRT_INCLUDE_DIR OR NOT TENSORRT_LIBRARY)
+    message(FATAL_ERROR "WASTE_WITH_TENSORRT needs TENSORRT_INCLUDE_DIR and TENSORRT_LIBRARY")
+  endif()
+  target_sources(waste_engine PRIVATE src/trt_model.cpp)
+  target_include_directories(waste_engine PRIVATE ${TENSORRT_INCLUDE_DIR})
+  target_link_libraries(waste_engine PRIVATE ${TENSORRT_LIBRARY})
+  target_compile_definitions(waste_engine PRIVATE WASTE_WITH_TENSORRT)
+endif()

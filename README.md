@@ -44,6 +44,15 @@ paper/cardboard, metal, glass, organic, other) and exports it. `bench` compares
 the engine with the baseline on a validation image. `EPOCHS`, `BATCH`, `REPEAT`
 and `IMAGE` can be set as environment variables.
 
+```
+!bash scripts/run_all.sh trt
+```
+
+`trt` installs TensorRT, builds an FP16 engine from the model, rebuilds the C++
+engine with the TensorRT backend and benchmarks it next to the TorchScript one.
+A `.engine` file passed as `--model` runs through TensorRT; anything else runs
+through TorchScript.
+
 ## Running the engine directly
 
 ```
@@ -71,5 +80,5 @@ A video file as `--input` gives per-frame scores with `--csv scores.csv`.
   from a segmentation model would fix that.
 - TACO is ground-level litter. Drone footage and ghat-specific waste such as
   floral offerings need local images added to the training set.
-- The model runs in FP32 through TorchScript. TensorRT with FP16/INT8, pinned
-  memory with CUDA streams, and a PyTorch extension for the kernels come next.
+- INT8 quantisation, pinned memory with CUDA streams, and a PyTorch extension
+  for the kernels come next.

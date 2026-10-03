@@ -1,10 +1,9 @@
 #include "gpu_pipeline.h"
+#include "model.h"
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/videoio.hpp>
-#include <torch/cuda.h>
-#include <torch/script.h>
 
 #include <algorithm>
 #include <chrono>
@@ -12,12 +11,14 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 using waste::Detection;
 using waste::GpuPipeline;
+using waste::Model;
 using waste::Tile;
 
 struct Args {
@@ -64,7 +65,7 @@ private:
 static void usage()
 {
     std::puts(
-        "waste_engine --model M.torchscript --input IMAGE_OR_VIDEO [options]\n"
+        "waste_engine --model M.torchscript|M.engine --input IMAGE_OR_VIDEO [options]\n"
         "  --classes FILE   class names, one per line\n"
         "  --batch N        batch size the model was exported with (default 8)\n"
         "  --size N         network input size (default 640)\n"
@@ -141,7 +142,7 @@ static std::vector<Tile> make_tiles(int W, int H, int S, float overlap, bool add
     return tiles;
 }
 
-static FrameResult process(const cv::Mat& frame, const Args& a, torch::jit::Module& module,
+static FrameResult process(const cv::Mat& frame, const Args& a, Model& model,
                            GpuPipeline& pipe, Timings& t)
 {
     const cv::Mat bgr = frame.isContinuous() ? frame : frame.clone();
@@ -154,26 +155,16 @@ static FrameResult process(const cv::Mat& frame, const Args& a, torch::jit::Modu
     r.tiles = (int)tiles.size();
     t.upload += clk.lap();
 
-    const auto opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA, 0);
     for (int first = 0; first < r.tiles; first += a.batch) {
         const int count = std::min(a.batch, r.tiles - first);
 
         float* d_input = pipe.preprocess(first, count);
         t.preprocess += clk.lap();
 
-        // Wraps the device buffer without copying it.
-        torch::Tensor input = torch::from_blob(d_input, {a.batch, 3, a.size, a.size}, opts);
-        torch::jit::IValue out = module.forward({input});
-        torch::Tensor pred = out.isTuple() ? out.toTuple()->elements()[0].toTensor() : out.toTensor();
-        pred = pred.to(torch::kFloat32).contiguous();
-        if (pred.dim() != 3 || pred.size(0) != a.batch || pred.size(1) <= 4)
-            throw std::runtime_error(
-                "unexpected model output shape; expected [batch, 4 + classes, anchors] "
-                "from a YOLO detect model exported with the same --batch");
+        const float* d_pred = model.infer(d_input);
         t.infer += clk.lap();
 
-        pipe.decode(pred.data_ptr<float>(), (int)pred.size(1) - 4, (int)pred.size(2),
-                    first, count, a.conf);
+        pipe.decode(d_pred, model.num_classes(), model.num_anchors(), first, count, a.conf);
         t.decode += clk.lap();
     }
 
@@ -264,7 +255,7 @@ static bool is_video(const std::string& path)
     return ext == "mp4" || ext == "avi" || ext == "mov" || ext == "mkv";
 }
 
-static int run_image(const Args& a, torch::jit::Module& module, GpuPipeline& pipe,
+static int run_image(const Args& a, Model& model, GpuPipeline& pipe,
                      const std::vector<std::string>& names)
 {
     const cv::Mat img = cv::imread(a.input, cv::IMREAD_COLOR);
@@ -276,7 +267,7 @@ static int run_image(const Args& a, torch::jit::Module& module, GpuPipeline& pip
     FrameResult r;
     for (int i = 0; i < a.repeat; ++i) {
         Timings one;
-        r = process(img, a, module, pipe, one);
+        r = process(img, a, model, pipe, one);
         if (i >= warmup) {
             t.upload += one.upload; t.preprocess += one.preprocess; t.infer += one.infer;
             t.decode += one.decode; t.nms += one.nms; t.coverage += one.coverage;
@@ -302,7 +293,7 @@ static int run_image(const Args& a, torch::jit::Module& module, GpuPipeline& pip
     return 0;
 }
 
-static int run_video(const Args& a, torch::jit::Module& module, GpuPipeline& pipe)
+static int run_video(const Args& a, Model& model, GpuPipeline& pipe)
 {
     cv::VideoCapture cap(a.input);
     if (!cap.isOpened()) throw std::runtime_error("cannot open video " + a.input);
@@ -320,7 +311,7 @@ static int run_video(const Args& a, torch::jit::Module& module, GpuPipeline& pip
     cv::Mat frame;
     while (cap.read(frame)) {
         Timings one;
-        const FrameResult r = process(frame, a, module, pipe, one);
+        const FrameResult r = process(frame, a, model, pipe, one);
         if (csv.is_open()) csv << frames << "," << r.dets.size() << "," << r.coverage * 100.0f << "\n";
         if (frames >= warmup) {
             t.upload += one.upload; t.preprocess += one.preprocess; t.infer += one.infer;
@@ -337,6 +328,24 @@ static int run_video(const Args& a, torch::jit::Module& module, GpuPipeline& pip
     return 0;
 }
 
+static bool has_suffix(const std::string& s, const std::string& suffix)
+{
+    return s.size() >= suffix.size() &&
+           s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+// A .engine file runs through TensorRT, anything else through TorchScript.
+static std::unique_ptr<Model> load_model(const Args& a)
+{
+    if (!has_suffix(a.model, ".engine")) return waste::load_torchscript(a.model, a.batch, a.size);
+#ifdef WASTE_WITH_TENSORRT
+    return waste::load_tensorrt(a.model, a.batch, a.size);
+#else
+    throw std::runtime_error(
+        "this build has no TensorRT backend; rebuild with -DWASTE_WITH_TENSORRT=ON");
+#endif
+}
+
 int main(int argc, char** argv)
 {
     try {
@@ -345,15 +354,10 @@ int main(int argc, char** argv)
             return 1;
         }
         const Args a = parse_args(argc, argv);
-        if (!torch::cuda::is_available()) throw std::runtime_error("no CUDA device available");
-
-        torch::jit::Module module = torch::jit::load(a.model, torch::kCUDA);
-        module.eval();
-        torch::NoGradGuard no_grad;
-
+        const std::unique_ptr<Model> model = load_model(a);
         GpuPipeline pipe(a.size, a.batch);
         const std::vector<std::string> names = load_classes(a.classes);
-        return is_video(a.input) ? run_video(a, module, pipe) : run_image(a, module, pipe, names);
+        return is_video(a.input) ? run_video(a, *model, pipe) : run_image(a, *model, pipe, names);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "error: %s\n", e.what());
         return 1;
