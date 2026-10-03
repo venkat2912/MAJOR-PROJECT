@@ -81,9 +81,20 @@ A video file as `--input` gives per-frame scores with `--csv scores.csv`.
 
 ## Measured speed
 
-One 1920x1440 photo, cut into 13 tiles and run in batches of 8, on a Tesla T4
-(Colab). Mean of 48 runs, in milliseconds per frame. All three produced the
-same 39 detections.
+One 1920x1440 validation photo, cut into 13 tiles and run in batches of 8, on a
+Tesla T4. Mean of 48 runs, in milliseconds per frame. Within each run the three
+pipelines produced identical detections.
+
+Kaggle (CUDA 12.8, TensorRT 11.3), with the model trained on the full dataset:
+
+| Stage | Python baseline | C++ engine, TorchScript FP32 | C++ engine, TensorRT FP16 |
+|---|---|---|---|
+| Preprocess | 38.2 | 2.6 | 2.6 |
+| Inference | 123.1 | 133.8 | 33.2 |
+| Postprocess | 4.2 | 0.3 | 0.3 |
+| Total | 165.4 (6.0 fps) | 136.7 (7.3 fps) | 36.1 (27.7 fps) |
+
+Colab (CUDA 13.0, TensorRT 11.3), with an earlier model:
 
 | Stage | Python baseline | C++ engine, TorchScript FP32 | C++ engine, TensorRT FP16 |
 |---|---|---|---|
@@ -92,8 +103,27 @@ same 39 detections.
 | Postprocess | 4.4 | 0.3 | 0.2 |
 | Total | 199.1 (5.0 fps) | 165.7 (6.0 fps) | 34.6 (28.9 fps) |
 
-The model used here was trained on under half of TACO and is not accurate yet
-(mAP50 0.23), so these numbers describe speed only.
+The engine's time is the same on both; the end-to-end speedup is 4.6x on Kaggle
+and 5.8x on Colab because the Python baseline ran faster on Kaggle.
+
+## Measured accuracy
+
+YOLO11s fine-tuned for 60 epochs on all 1,500 TACO photos plus their tiles
+(6,422 training images), scored on 1,062 held-out validation images.
+
+| Class | Validation objects | Precision | Recall | mAP50 | mAP50-95 |
+|---|---|---|---|---|---|
+| all | 1929 | 0.47 | 0.29 | 0.257 | 0.189 |
+| plastic | 932 | 0.52 | 0.52 | 0.493 | 0.367 |
+| metal | 263 | 0.50 | 0.52 | 0.483 | 0.385 |
+| paper/cardboard | 273 | 0.42 | 0.44 | 0.343 | 0.247 |
+| other | 433 | 0.35 | 0.24 | 0.190 | 0.108 |
+| glass | 20 | 0.02 | 0.05 | 0.033 | 0.029 |
+| organic | 8 | 1.00 | 0.00 | 0.000 | 0.000 |
+
+The detector finds about half of the plastic and metal and is not reliable for
+the other classes. Glass and organic have too few examples in TACO to learn or
+to measure.
 
 ## Limits
 
