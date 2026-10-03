@@ -254,7 +254,8 @@ void GpuPipeline::decode(const float* d_pred, int num_classes, int num_anchors,
     CUDA_CHECK(cudaGetLastError());
 }
 
-std::vector<Detection> GpuPipeline::nms(float threshold, bool use_ios, bool class_agnostic)
+std::vector<Detection> GpuPipeline::nms(float threshold, bool use_ios, bool class_agnostic,
+                                        bool merge)
 {
     int count = 0;
     CUDA_CHECK(cudaMemcpy(&count, d_count_, sizeof(int), cudaMemcpyDeviceToHost));
@@ -282,9 +283,24 @@ std::vector<Detection> GpuPipeline::nms(float threshold, bool use_ios, bool clas
     std::vector<Detection> keep;
     for (int i = 0; i < n; ++i) {
         if ((removed[i / 64] >> (i % 64)) & 1ULL) continue;
-        keep.push_back(sorted[i]);
+        Detection d = sorted[i];
         const unsigned long long* row = mask.data() + (size_t)i * blocks;
-        for (int b = i / 64; b < blocks; ++b) removed[b] |= row[b];
+        for (int b = i / 64; b < blocks; ++b) {
+            if (merge) {
+                // Grow the kept box over every box it absorbs for the first time.
+                const unsigned long long fresh = row[b] & ~removed[b];
+                for (int k = 0; fresh != 0 && k < 64; ++k) {
+                    if (!((fresh >> k) & 1ULL)) continue;
+                    const Detection& o = sorted[(size_t)b * 64 + k];
+                    d.x1 = std::min(d.x1, o.x1);
+                    d.y1 = std::min(d.y1, o.y1);
+                    d.x2 = std::max(d.x2, o.x2);
+                    d.y2 = std::max(d.y2, o.y2);
+                }
+            }
+            removed[b] |= row[b];
+        }
+        keep.push_back(d);
     }
     return keep;
 }

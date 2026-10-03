@@ -48,10 +48,12 @@ public:
     void decode(const float* d_pred, int num_classes, int num_anchors,
                 int first_tile, int count, float conf);
 
-    // Sorts the candidates by score and suppresses overlaps across all tiles.
-    // use_ios switches the overlap metric from IoU to intersection over the
-    // smaller box, which merges objects cut by a tile border.
-    std::vector<Detection> nms(float threshold, bool use_ios, bool class_agnostic);
+    // Sorts the candidates by score and resolves overlaps across all tiles.
+    // use_ios measures overlap as intersection over the smaller box instead of
+    // IoU, so a fragment seen by one tile matches the whole object seen by
+    // another. With merge, the kept box grows to cover the boxes it absorbs
+    // instead of just discarding them.
+    std::vector<Detection> nms(float threshold, bool use_ios, bool class_agnostic, bool merge);
 
     // Fraction of the frame covered by the union of the boxes, in [0, 1].
     float coverage(const std::vector<Detection>& dets);

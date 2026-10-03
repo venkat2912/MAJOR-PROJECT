@@ -24,8 +24,8 @@ using waste::Tile;
 struct Args {
     std::string model, classes, input, out, json, csv;
     int batch = 8, size = 640, repeat = 1;
-    float overlap = 0.2f, conf = 0.25f, iou = 0.5f;
-    bool ios = false, agnostic = false, full = true;
+    float overlap = 0.2f, conf = 0.25f, match_thr = 0.5f;
+    bool ios = true, merge = true, agnostic = false, full = true;
 };
 
 struct Timings {
@@ -71,8 +71,9 @@ static void usage()
         "  --size N         network input size (default 640)\n"
         "  --overlap F      tile overlap fraction (default 0.2)\n"
         "  --conf F         confidence threshold (default 0.25)\n"
-        "  --iou F          overlap threshold for suppression (default 0.5)\n"
-        "  --ios            match on intersection over smaller box instead of IoU\n"
+        "  --match-thr F    overlap above which two boxes are the same object (default 0.5)\n"
+        "  --metric M       ios (intersection over smaller box, default) or iou\n"
+        "  --no-merge       drop overlapping boxes instead of merging them\n"
         "  --agnostic       suppress across classes\n"
         "  --no-full        skip the extra whole-frame tile\n"
         "  --repeat N       run an image N times and report mean timings\n"
@@ -101,8 +102,13 @@ static Args parse_args(int argc, char** argv)
         else if (k == "--repeat") a.repeat = std::stoi(next());
         else if (k == "--overlap") a.overlap = std::stof(next());
         else if (k == "--conf") a.conf = std::stof(next());
-        else if (k == "--iou") a.iou = std::stof(next());
-        else if (k == "--ios") a.ios = true;
+        else if (k == "--match-thr") a.match_thr = std::stof(next());
+        else if (k == "--metric") {
+            const std::string m = next();
+            if (m != "ios" && m != "iou") throw std::runtime_error("--metric must be ios or iou");
+            a.ios = m == "ios";
+        }
+        else if (k == "--no-merge") a.merge = false;
         else if (k == "--agnostic") a.agnostic = true;
         else if (k == "--no-full") a.full = false;
         else throw std::runtime_error("unknown option " + k);
@@ -168,7 +174,7 @@ static FrameResult process(const cv::Mat& frame, const Args& a, Model& model,
         t.decode += clk.lap();
     }
 
-    r.dets = pipe.nms(a.iou, a.ios, a.agnostic);
+    r.dets = pipe.nms(a.match_thr, a.ios, a.agnostic, a.merge);
     t.nms += clk.lap();
     r.coverage = pipe.coverage(r.dets);
     t.coverage += clk.lap();

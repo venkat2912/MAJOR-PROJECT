@@ -1,7 +1,7 @@
 """Plain Python version of the tiled pipeline, used as the benchmark baseline.
 
-Tiling and preprocessing run on the CPU with NumPy/OpenCV, the model and NMS
-run on the GPU through PyTorch. It loads the same TorchScript file as the C++
+Tiling, preprocessing and box merging run on the CPU with NumPy/OpenCV, the
+model and output decoding run on the GPU through PyTorch. It loads the same TorchScript file as the C++
 engine, so detections should match and only the speed should differ.
 """
 import argparse
@@ -12,7 +12,8 @@ import time
 import cv2
 import numpy as np
 import torch
-import torchvision
+
+from merge import resolve_overlaps
 
 NMS_LIMIT = 4096
 
@@ -106,9 +107,9 @@ def run(frame, model, args):
     if scores.numel() > NMS_LIMIT:
         top = scores.topk(NMS_LIMIT).indices
         boxes, scores, classes = boxes[top], scores[top], classes[top]
-    keep = torchvision.ops.batched_nms(boxes, scores, classes, args.iou)
-    boxes, scores, classes = boxes[keep].cpu(), scores[keep].cpu(), classes[keep].cpu()
-    torch.cuda.synchronize()
+    boxes, scores, classes = resolve_overlaps(
+        boxes.cpu().numpy(), scores.cpu().numpy(), classes.cpu().numpy(),
+        threshold=args.match_thr, use_ios=args.metric == "ios", merge=not args.no_merge)
     t["postprocess"] += (time.perf_counter() - t0) * 1e3
 
     dets = [dict(cls=int(c), score=float(s), box=[float(v) for v in b])
@@ -124,7 +125,9 @@ def main():
     p.add_argument("--size", type=int, default=640)
     p.add_argument("--overlap", type=float, default=0.2)
     p.add_argument("--conf", type=float, default=0.25)
-    p.add_argument("--iou", type=float, default=0.5)
+    p.add_argument("--match-thr", type=float, default=0.5)
+    p.add_argument("--metric", choices=("ios", "iou"), default="ios")
+    p.add_argument("--no-merge", action="store_true")
     p.add_argument("--no-full", action="store_true")
     p.add_argument("--repeat", type=int, default=1)
     p.add_argument("--json")

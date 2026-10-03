@@ -76,7 +76,11 @@ A video file as `--input` gives per-frame scores with `--csv scores.csv`.
 3. LibTorch runs the model on that buffer without copying it.
 4. A kernel thresholds the raw output and maps boxes back to frame coordinates.
 5. Candidates from all tiles are sorted on the GPU and a kernel builds the
-   pairwise overlap mask; the final scan over the mask runs on the CPU.
+   pairwise overlap mask; the final scan over the mask runs on the CPU. An
+   object larger than a tile is reported in pieces by several tiles, so boxes
+   of the same class are matched on intersection over the smaller box and the
+   kept box grows to cover the pieces it absorbs. `--metric iou --no-merge`
+   gives plain non-max suppression instead.
 6. A kernel measures the fraction of the frame covered by the kept boxes.
 
 ## Measured speed
@@ -105,6 +109,9 @@ Colab (CUDA 13.0, TensorRT 11.3), with an earlier model:
 
 The engine's time is the same on both; the end-to-end speedup is 4.6x on Kaggle
 and 5.8x on Colab because the Python baseline ran faster on Kaggle.
+
+Both runs used plain non-max suppression, before box merging was added. Merging
+changes only the last, CPU-side step, on both sides of the comparison.
 
 ## Measured accuracy
 
