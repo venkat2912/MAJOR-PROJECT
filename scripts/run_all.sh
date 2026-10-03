@@ -93,6 +93,16 @@ compare() {
     fi
 }
 
+# The first whole validation photo. A glob, not `ls | head`: with many files
+# head closes the pipe early and pipefail turns that into a failure.
+first_val_image() {
+    local f
+    for f in data/taco/images/val/*.jpg; do
+        echo "$f"
+        return
+    done
+}
+
 sample_image() {
     python3 -c "from ultralytics.utils import ASSETS; print(ASSETS / 'bus.jpg')"
 }
@@ -115,7 +125,7 @@ train)
     ;;
 bench)
     [ -x build/waste_engine ] || { setup; build; }
-    IMAGE="${IMAGE:-$(ls data/taco/images/val/*.jpg | head -n 1)}"
+    IMAGE="${IMAGE:-$(first_val_image)}"
     compare "${MODEL:-models/waste.torchscript}" "$IMAGE"
     ;;
 trt)
@@ -124,7 +134,7 @@ trt)
     # Uses the trained waste model when there is one, the stock model otherwise.
     if [ -f models/waste.pt ]; then
         WEIGHTS=models/waste.pt NAME=waste
-        IMAGE="${IMAGE:-$(ls data/taco/images/val/*.jpg | head -n 1)}"
+        IMAGE="${IMAGE:-$(first_val_image)}"
     else
         WEIGHTS=yolo11s.pt NAME=coco
         IMAGE="${IMAGE:-$(sample_image)}"
