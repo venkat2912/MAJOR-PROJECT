@@ -111,8 +111,10 @@ Colab (CUDA 13.0, TensorRT 11.3), with an earlier model:
 The engine's time is the same on both; the end-to-end speedup is 4.6x on Kaggle
 and 5.8x on Colab because the Python baseline ran faster on Kaggle.
 
-Both runs used plain non-max suppression, before box merging was added. Merging
-changes only the last, CPU-side step, on both sides of the comparison.
+Both runs used plain non-max suppression, before box merging was added. With
+merging on, a later Kaggle run on the same photo (using the stock COCO model)
+measured 34.0 ms for the TensorRT engine against 156.3 ms for the baseline
+(4.6x), again with identical detections.
 
 ## Measured accuracy
 
