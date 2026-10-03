@@ -1,7 +1,5 @@
 # WasteScope
-# WasteScope
 AI BASED ENGINE FOR WASTE CLASSIFICATION
-
 
 A GPU inference engine for drone cleanliness surveys of ghats and water-body
 banks. A high-resolution frame is cut into overlapping tiles, each tile goes
